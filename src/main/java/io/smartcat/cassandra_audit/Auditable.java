@@ -34,7 +34,7 @@ public @interface Auditable {
 	/**
 	 * If set, specifies the used keyspace. 
 	 */
-	String keyspace() default "";
+	String keyspaceName() default "";
 	
 	/**
 	 * Controls whether an audit record should be issued
