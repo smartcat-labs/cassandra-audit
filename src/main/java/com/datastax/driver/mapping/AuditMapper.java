@@ -1,16 +1,13 @@
 package com.datastax.driver.mapping;
 
-import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import com.datastax.driver.core.BoundStatement;
-import com.datastax.driver.core.ColumnDefinitions;
-import com.datastax.driver.core.ColumnMetadata;
-import com.datastax.driver.core.PreparedStatement;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -22,12 +19,13 @@ public class AuditMapper<T> extends Mapper<T> {
 	private static final EnumMap<Option.Type, Option> NO_OPTIONS = new EnumMap<Option.Type, Option>(Option.Type.class);
 	private static int EXECUTOR_NO_THREADS = 10;
 	private static ExecutorService executor = Executors.newFixedThreadPool(EXECUTOR_NO_THREADS);
-	
-	private class AuditOptions {
+
+	class AuditOptions {
 		boolean auditable;
 		boolean before;
 		boolean after;
 		String tableName;
+		String keyspaceName;
 		
 		AuditOptions(Class<T> klass) {
 			Auditable annotation = klass.getAnnotation(Auditable.class);
@@ -37,6 +35,10 @@ public class AuditMapper<T> extends Mapper<T> {
 				if (this.tableName.isEmpty()) {
 					this.tableName = annotation.tablePrefix() + klass.getSimpleName().toLowerCase();
 				}
+				this.keyspaceName = annotation.keyspaceName();
+				if (this.keyspaceName.isEmpty()) {
+					this.keyspaceName = mapper.getKeyspace();
+				}
 				this.before = annotation.before();
 				this.after = annotation.after();
 			} else {
@@ -45,15 +47,18 @@ public class AuditMapper<T> extends Mapper<T> {
 		}
 	}
 	
-	private AuditOptions auditOptions;
+	AuditOptions auditOptions;
     private volatile EnumMap<Option.Type, Option> defaultSaveOptions;
     private volatile EnumMap<Option.Type, Option> defaultDeleteOptions;
+    private AuditLogger auditLogger;
     
 	public AuditMapper(MappingManager manager, Class<T> klass, EntityMapper<T> mapper) {
 		super(manager, klass, mapper);
         this.defaultSaveOptions = NO_OPTIONS;
         this.defaultDeleteOptions = NO_OPTIONS;
         this.auditOptions = new AuditOptions(klass);
+        this.auditLogger = CassandraAuditLogger.getInstance(manager.getSession());
+        this.auditLogger.init(this);
 	}
 
 
@@ -313,13 +318,18 @@ public class AuditMapper<T> extends Mapper<T> {
     	if (auditOptions.auditable && 
     			((before && auditOptions.before) || (!before && auditOptions.after))) {
     		// execute the rest of audit action asynchronously  
-			executor.submit(new Callable<Void>() {
+			Future<Void> task = executor.submit(new Callable<Void>() {
 				@Override
 				public Void call() throws Exception {
 					auditSaveExec(before, entity, options);
 					return null;
 				}
-			});    		
+			});
+			try {
+				task.get();
+			} catch (InterruptedException | ExecutionException e) {
+				throw new RuntimeException("An error occured while executing audit.", e);
+			}
     	}
     }
     
@@ -327,13 +337,18 @@ public class AuditMapper<T> extends Mapper<T> {
     	if (auditOptions.auditable && 
     			((before && auditOptions.before) || (!before && auditOptions.after))) {
     		// execute the rest of audit action asynchronously
-			executor.submit(new Callable<Void>() {
+			Future<Void> task = executor.submit(new Callable<Void>() {
 				@Override
 				public Void call() throws Exception {
 					auditDeleteExec(before, entity, objects);
 					return null;
 				}
-			});    		
+			});
+			try {
+				task.get();
+			} catch (InterruptedException | ExecutionException e) {
+				throw new RuntimeException("An error occured while executing audit.", e);
+			}			
     	}    	
     }
      
@@ -344,21 +359,7 @@ public class AuditMapper<T> extends Mapper<T> {
     	} else {
     		bs = (BoundStatement)saveQuery(entity, options);
     	}
-    	PreparedStatement ps = bs.preparedStatement();
-    	
-    	String statementQuery = bs.preparedStatement().getQueryString();
-    	List<String> statementValues = new ArrayList<String>();
-    	for (ColumnDefinitions.Definition def : ps.getVariables()) {
-    		statementValues.add(def.getName() + "[" + def.getType() + "]:" + bs.getObject(def.getName()));
-    	}
-    	
-    	List<String> auditPrimaryKey = new ArrayList<String>();
-    	for (ColumnMetadata cm : getTableMetadata().getPrimaryKey()) {
-    		auditPrimaryKey.add(cm.getName() + ":" + bs.getObject(cm.getName()));
-    	}
-    	
-    	System.out.println("Save mutation [" + (before ? "before" : "after") + "]: " + entity.getClass().getSimpleName() + ": " +
-    			statementQuery + ": " + statementValues + ": primary key: " + auditPrimaryKey);
+    	auditLogger.log(bs);
     } 
     
     private void auditDeleteExec(final boolean before, final T entity, final Object... objects) {
@@ -367,20 +368,7 @@ public class AuditMapper<T> extends Mapper<T> {
     		bs = (BoundStatement)deleteQuery(entity);
     	} else {
     		bs = (BoundStatement)deleteQuery(entity, objects);
-    	}
-    	PreparedStatement ps = bs.preparedStatement();
-    	
-    	String statementQuery = bs.preparedStatement().getQueryString();
-    	List<String> statementValues = new ArrayList<String>();
-    	for (ColumnDefinitions.Definition def : ps.getVariables()) {
-    		statementValues.add(def.getName() + "[" + def.getType() + "]:" + bs.getObject(def.getName()));
-    	}
-    	
-    	List<String> auditPrimaryKey = new ArrayList<String>();
-    	for (ColumnMetadata cm : getTableMetadata().getPrimaryKey()) {
-    		auditPrimaryKey.add(cm.getName() + ":" + bs.getObject(cm.getName()));
-    	}
-    	
-    	System.out.println("Delete mutation [" + (before ? "before" : "after") + "]: " + entity.getClass().getSimpleName() + ": " +
-    			statementQuery + ": " + statementValues + ": primary key: " + auditPrimaryKey);    }    
+    	}    
+    	auditLogger.log(bs);
+    }
 }
