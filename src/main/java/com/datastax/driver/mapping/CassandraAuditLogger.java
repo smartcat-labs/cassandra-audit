@@ -34,6 +34,8 @@ public class CassandraAuditLogger implements AuditLogger {
 	
 	public static class AuditRow {
 		static String COL_TIMESTAMP = "time";
+		static String COL_EXEC_TIME = "exec";
+		static String COL_ERROR = "err";
 		static String COL_MUTATION_TYPE = "type";
 		static String COL_CQL_STRING = "cql";
 		static String COL_STATEMENT_VALUES = "values";
@@ -101,7 +103,7 @@ public class CassandraAuditLogger implements AuditLogger {
 	 * @see io.smartcat.cassandra_audit.AuditLogger#log(com.datastax.driver.core.Statement, com.datastax.driver.mapping.Mapper)
 	 */
 	@Override
-	public void log(BoundStatement origStatement) {
+	public void log(long execTime, String error, BoundStatement origStatement) {
 		PreparedStatement origPreparedStatement = origStatement.preparedStatement();
 		
 		String entityName = trim(origPreparedStatement.getVariables().getKeyspace(0)) + "." + 
@@ -136,6 +138,8 @@ public class CassandraAuditLogger implements AuditLogger {
     	String cqlString = origPreparedStatement.getQueryString();
 		bs.setDate(AuditRow.COL_TIMESTAMP, new Date());
 		bs.setString(AuditRow.COL_MUTATION_TYPE, getMutationType(cqlString));
+		bs.setLong(AuditRow.COL_EXEC_TIME, execTime);
+		bs.setString(AuditRow.COL_ERROR, error);
 		bs.setString(AuditRow.COL_CQL_STRING, cqlString);
 		bs.setString(AuditRow.COL_STATEMENT_VALUES, values.toString());
 		
@@ -189,6 +193,8 @@ public class CassandraAuditLogger implements AuditLogger {
 		
 		insert.value(AuditRow.COL_TIMESTAMP, bindMarker());
 		insert.value(AuditRow.COL_MUTATION_TYPE, bindMarker());
+		insert.value(AuditRow.COL_EXEC_TIME, bindMarker());
+		insert.value(AuditRow.COL_ERROR, bindMarker());		
 		insert.value(AuditRow.COL_CQL_STRING, bindMarker());
 		insert.value(AuditRow.COL_STATEMENT_VALUES, bindMarker());
 		
@@ -217,6 +223,8 @@ public class CassandraAuditLogger implements AuditLogger {
 		create
 			.addClusteringColumn(AuditRow.COL_TIMESTAMP, DataType.timestamp())
 			.addColumn(AuditRow.COL_MUTATION_TYPE, DataType.text())
+			.addColumn(AuditRow.COL_EXEC_TIME, DataType.bigint())
+			.addColumn(AuditRow.COL_ERROR, DataType.text())			
 			.addColumn(AuditRow.COL_CQL_STRING, DataType.text())
 			.addColumn(AuditRow.COL_STATEMENT_VALUES, DataType.text());
 		

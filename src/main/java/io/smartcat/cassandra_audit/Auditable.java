@@ -35,18 +35,4 @@ public @interface Auditable {
 	 * If set, specifies the used keyspace. 
 	 */
 	String keyspaceName() default "";
-	
-	/**
-	 * Controls whether an audit record should be issued
-	 * before the actual entity mutation. The default
-	 * value is {@code true}.
-	 */
-	boolean before() default true;
-	
-	/**
-	 * Controls whether an audit record should be issued
-	 * after the actual entity mutation. The default
-	 * value is {@code false}.
-	 */	
-	boolean after() default false;
 }

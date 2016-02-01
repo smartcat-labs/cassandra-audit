@@ -22,8 +22,6 @@ public class AuditMapper<T> extends Mapper<T> {
 
 	class AuditOptions {
 		boolean auditable;
-		boolean before;
-		boolean after;
 		String tableName;
 		String keyspaceName;
 		
@@ -39,8 +37,6 @@ public class AuditMapper<T> extends Mapper<T> {
 				if (this.keyspaceName.isEmpty()) {
 					this.keyspaceName = mapper.getKeyspace();
 				}
-				this.before = annotation.before();
-				this.after = annotation.after();
 			} else {
 				this.auditable = false;
 			} 			
@@ -103,20 +99,33 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public void save(T entity) {
-		auditSaveBefore(entity);
-		super.save(entity);
-		auditSaveAfter(entity);
+		final long start = System.nanoTime();
+		try {
+			super.save(entity);
+			final long execTime = System.nanoTime() - start;
+			auditSave(execTime, null, entity);			
+		} catch (Exception err) {
+			final long execTime = System.nanoTime() - start;
+			auditSave(execTime, err.getMessage(), entity);
+			throw err;
+		}
 	}
-
 
 	/* (non-Javadoc)
 	 * @see com.datastax.driver.mapping.Mapper#save(java.lang.Object, com.datastax.driver.mapping.Mapper.Option[])
 	 */
 	@Override
 	public void save(T entity, Option... options) {
-		auditSaveBefore(entity, options);
-		super.save(entity, options);
-		auditSaveAfter(entity, options);
+		final long start = System.nanoTime();
+		try {
+			super.save(entity, options);
+			final long execTime = System.nanoTime() - start;
+			auditSave(execTime, null, entity, options);			
+		} catch (Exception err) {
+			final long execTime = System.nanoTime() - start;
+			auditSave(execTime, err.getMessage(), entity, options);
+			throw err;
+		}		
 	}
 
 
@@ -125,17 +134,19 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public ListenableFuture<Void> saveAsync(final T entity) {
-		auditSaveBefore(entity);
+		final long start = System.nanoTime();
 		ListenableFuture<Void> res = super.saveAsync(entity);
     	Futures.addCallback(res, new FutureCallback<Void>() {
 			@Override
-			public void onFailure(Throwable arg0) {
-				// Do nothing.
+			public void onFailure(Throwable err) {
+				final long execTime = System.nanoTime() - start;
+				auditSave(execTime, err.getMessage(), entity);				
 			}
 
 			@Override
 			public void onSuccess(Void arg0) {
-				auditSaveAfter(entity);
+				final long execTime = System.nanoTime() - start;
+				auditSave(execTime, null, entity);
 			}
 		});		
 
@@ -148,17 +159,19 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public ListenableFuture<Void> saveAsync(final T entity, final Option... options) {
-		auditSaveBefore(entity, options);
+		final long start = System.nanoTime();
 		ListenableFuture<Void> res = super.saveAsync(entity, options);
     	Futures.addCallback(res, new FutureCallback<Void>() {
 			@Override
-			public void onFailure(Throwable arg0) {
-				// Do nothing.
+			public void onFailure(Throwable err) {
+				final long execTime = System.nanoTime() - start;
+				auditSave(execTime, err.getMessage(), entity, options);
 			}
 
 			@Override
 			public void onSuccess(Void arg0) {
-				auditSaveAfter(entity, options);
+				final long execTime = System.nanoTime() - start;
+				auditSave(execTime, null, entity, options);
 			}
 		});			
 		
@@ -171,9 +184,16 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public void delete(T entity) {
-		auditDeleteBefore(entity);
-		super.delete(entity);
-		auditDeleteAfter(entity);
+		final long start = System.nanoTime();
+		try {
+			super.delete(entity);
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, null, entity);			
+		} catch (Exception err) {
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, err.getMessage(), entity);
+			throw err;
+		}		
 	}
 
 
@@ -182,9 +202,16 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public void delete(T entity, Option... options) {
-		auditDeleteBefore(entity, options);
-		super.delete(entity, options);
-		auditDeleteAfter(entity, options);
+		final long start = System.nanoTime();
+		try {
+			super.delete(entity, options);
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, null, entity, options);			
+		} catch (Exception err) {
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, err.getMessage(), entity, options);
+			throw err;
+		}		
 	}
 
 
@@ -193,17 +220,19 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public ListenableFuture<Void> deleteAsync(final T entity) {
-		auditDeleteBefore(entity);
+		final long start = System.nanoTime();
 		ListenableFuture<Void> res = super.deleteAsync(entity);
     	Futures.addCallback(res, new FutureCallback<Void>() {
 			@Override
-			public void onFailure(Throwable arg0) {
-				// Do nothing.
+			public void onFailure(Throwable err) {
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, err.getMessage(), entity);
 			}
 
 			@Override
 			public void onSuccess(Void arg0) {
-				auditDeleteAfter(entity);
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, null, entity);
 			}
 		});		
 
@@ -216,17 +245,19 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public ListenableFuture<Void> deleteAsync(final T entity, final Option... options) {
-		auditDeleteBefore(entity, options);
+		final long start = System.nanoTime();
 		ListenableFuture<Void> res = super.deleteAsync(entity, options);
     	Futures.addCallback(res, new FutureCallback<Void>() {
 			@Override
-			public void onFailure(Throwable arg0) {
-				// Do nothing.
+			public void onFailure(Throwable err) {
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, err.getMessage(), entity, options);
 			}
 
 			@Override
 			public void onSuccess(Void arg0) {
-				auditDeleteAfter(entity, options);
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, null, entity, options);
 			}
 		});		
 		
@@ -239,9 +270,16 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public void delete(Object... objects) {
-		auditDeleteBefore(objects);
-		super.delete(objects);
-		auditDeleteAfter(objects);
+		final long start = System.nanoTime();
+		try {
+			super.delete(objects);
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, null, objects);			
+		} catch (Exception err) {
+			final long execTime = System.nanoTime() - start;
+			auditDelete(execTime, err.getMessage(), objects);
+			throw err;
+		}		
 	}
 
 
@@ -250,17 +288,19 @@ public class AuditMapper<T> extends Mapper<T> {
 	 */
 	@Override
 	public ListenableFuture<Void> deleteAsync(final Object... objects) {
-		auditDeleteBefore(objects);
+		final long start = System.nanoTime();
 		ListenableFuture<Void> res = super.deleteAsync(objects);
     	Futures.addCallback(res, new FutureCallback<Void>() {
 			@Override
-			public void onFailure(Throwable arg0) {
-				// Do nothing.
+			public void onFailure(Throwable err) {
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, err.getMessage(), objects);
 			}
 
 			@Override
 			public void onSuccess(Void arg0) {
-				auditDeleteAfter(objects);
+				final long execTime = System.nanoTime() - start;
+				auditDelete(execTime, null, objects);
 			}
 		});		
 		return res;
@@ -274,54 +314,33 @@ public class AuditMapper<T> extends Mapper<T> {
         return result;
     }
     
-    private void auditSaveBefore(T entity) {
-    	auditSave(true, entity, (Mapper.Option[])null);
+    private void auditSave(final long execTime, final String error, T entity) {
+    	auditSaveAsync(execTime, error, entity, (Mapper.Option[])null);
     }
     
-    private void auditSaveBefore(T entity, Option... options) {
-    	auditSave(true, entity, options);
-    }
-
-    private void auditSaveAfter(T entity) {
-    	auditSave(false, entity, (Mapper.Option[])null);
+    private void auditSave(final long execTime, final String error, T entity, Option... options) {
+    	auditSaveAsync(execTime, error, entity, options);
     }
     
-    private void auditSaveAfter(T entity, Option... options) {
-    	auditSave(false, entity, options);
+    private void auditDelete(final long execTime, final String error, T entity) {
+    	auditDeleteAsync(execTime, error, entity, (Object[])null);
     }
     
-    private void auditDeleteBefore(T entity) {
-    	auditDelete(true, entity, (Object[])null);
+    private void auditDelete(final long execTime,  final String error, T entity, Option... options) {
+    	auditDeleteAsync(execTime, error, entity, (Object[])options);
     }
     
-    private void auditDeleteBefore(T entity, Option... options) {
-    	auditDelete(true, entity, (Object[])options);
+    private void auditDelete(final long execTime, final String error, Object... objects) {
+    	auditDeleteAsync(execTime, error, null, objects);
     }
     
-    private void auditDeleteBefore(Object... objects) {
-    	auditDelete(true, null, objects);
-    }
-    
-    private void auditDeleteAfter(T entity) {
-    	auditDelete(false, entity, (Object[])null);
-    }
-    
-    private void auditDeleteAfter(T entity, Option... options) {
-    	auditDelete(false, entity, (Object[])options);
-    }
-    
-    private void auditDeleteAfter(Object... objects) {
-    	auditDelete(false, null, objects);
-    }
-    
-    private void auditSave(final boolean before, final T entity, final Option... options) {
-    	if (auditOptions.auditable && 
-    			((before && auditOptions.before) || (!before && auditOptions.after))) {
+    private void auditSaveAsync(final long execTime, final String error, final T entity, final Option... options) {
+    	if (auditOptions.auditable) {
     		// execute the rest of audit action asynchronously  
 			Future<Void> task = executor.submit(new Callable<Void>() {
 				@Override
 				public Void call() throws Exception {
-					auditSaveExec(before, entity, options);
+					auditSaveExec(execTime, error, entity, options);
 					return null;
 				}
 			});
@@ -333,14 +352,13 @@ public class AuditMapper<T> extends Mapper<T> {
     	}
     }
     
-    private void auditDelete(final boolean before, final T entity, final Object... objects) {
-    	if (auditOptions.auditable && 
-    			((before && auditOptions.before) || (!before && auditOptions.after))) {
+    private void auditDeleteAsync(final long execTime, final String error, final T entity, final Object... objects) {
+    	if (auditOptions.auditable) {
     		// execute the rest of audit action asynchronously
 			Future<Void> task = executor.submit(new Callable<Void>() {
 				@Override
 				public Void call() throws Exception {
-					auditDeleteExec(before, entity, objects);
+					auditDeleteExec(execTime, error, entity, objects);
 					return null;
 				}
 			});
@@ -352,23 +370,23 @@ public class AuditMapper<T> extends Mapper<T> {
     	}    	
     }
      
-    private void auditSaveExec(final boolean before, final T entity, final Option... options) {
+    private void auditSaveExec(final long execTime, final String error, final T entity, final Option... options) {
     	BoundStatement bs;
     	if (options == null) {
     		bs = (BoundStatement)saveQuery(entity);
     	} else {
     		bs = (BoundStatement)saveQuery(entity, options);
     	}
-    	auditLogger.log(bs);
+    	auditLogger.log(execTime, error, bs);
     } 
     
-    private void auditDeleteExec(final boolean before, final T entity, final Object... objects) {
+    private void auditDeleteExec(final long execTime, final String error, final T entity, final Object... objects) {
     	BoundStatement bs;
     	if (objects == null) {
     		bs = (BoundStatement)deleteQuery(entity);
     	} else {
     		bs = (BoundStatement)deleteQuery(entity, objects);
     	}    
-    	auditLogger.log(bs);
+    	auditLogger.log(execTime, error, bs);
     }
 }

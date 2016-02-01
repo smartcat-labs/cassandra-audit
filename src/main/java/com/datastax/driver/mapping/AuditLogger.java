@@ -8,5 +8,5 @@ import com.datastax.driver.core.BoundStatement;
  */
 public interface AuditLogger {
 	public <T> void init(AuditMapper<T> mapper);
-	public void log(BoundStatement statement);
+	public void log(long execTime, String error, BoundStatement statement);
 }
