@@ -3,6 +3,7 @@ package com.datastax.driver.mapping;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.bindMarker;
 import static com.datastax.driver.core.querybuilder.QueryBuilder.insertInto;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -19,6 +20,9 @@ import com.datastax.driver.core.Statement;
 import com.datastax.driver.core.querybuilder.Insert;
 import com.datastax.driver.core.schemabuilder.Create;
 import com.datastax.driver.core.schemabuilder.SchemaBuilder;
+import com.datastax.driver.mapping.annotations.Column;
+
+import io.smartcat.cassandra_audit.AuditExclusion;
 
 /**
  * This is an implementation of {@link AuditLogger} that stores audit
@@ -31,6 +35,7 @@ public class CassandraAuditLogger implements AuditLogger {
 	private final Session session;
 	private volatile Map<String, PreparedStatement> preparedQueries = new HashMap<String, PreparedStatement>();
 	private volatile Map<String, List<String>> primaryKeyColumns = new HashMap<String, List<String>>();
+	private volatile Map<String, List<String>> excludedColumns = new HashMap<String, List<String>>();
 	
 	public static class AuditRow {
 		static String COL_TIMESTAMP = "time";
@@ -96,7 +101,9 @@ public class CassandraAuditLogger implements AuditLogger {
 		synchronized (preparedQueries) {
 			preparedQueries.put(entityName, stmt);
 		}
-		
+		synchronized (excludedColumns) {
+			excludedColumns.put(entityName, getExcludedColumns(mapper.mapper));
+		}
 	}
 	
 	/* (non-Javadoc)
@@ -117,22 +124,27 @@ public class CassandraAuditLogger implements AuditLogger {
 		BoundStatement bs = ps.bind();
 		
 		List<String> pkc = primaryKeyColumns.get(entityName);
+		List<String> exc = excludedColumns.get(entityName);
 		StringBuffer values = new StringBuffer();
 		ColumnDefinitions columns = origPreparedStatement.getVariables();
-    	for (Definition def : columns) { 
+    	for (Definition def : columns) {
+    		String colName = def.getName();
     		// if column is part of the entity's primary key
     		// inject it into the audit statement
-    		if (pkc.contains(def.getName())) {
+    		if (pkc.contains(colName)) {
     			// audit key is constructed from the entity's schema so type
     			// checking is not necessary
-    			bs.setBytesUnsafe(def.getName(), origStatement.getBytesUnsafe(def.getName()));
+    			bs.setBytesUnsafe(colName, origStatement.getBytesUnsafe(colName));
     		}
-    		
-    		// collect the original statemenet's values
-    		values.append(def.getName());
-    		values.append(":");
-    		values.append(origStatement.getObject(def.getName()));
-    		values.append("; ");
+
+    		// collect the original statemenet's values for this column
+    		// unless it is excluded
+    		if (!exc.contains(colName)) {
+	    		values.append(colName);
+	    		values.append(":");
+	    		values.append(origStatement.getObject(colName));
+	    		values.append("; ");
+    		}
     	}
 
     	String cqlString = origPreparedStatement.getQueryString();
@@ -249,5 +261,20 @@ public class CassandraAuditLogger implements AuditLogger {
 			columns.add(trim(cm.getColumnName()));
 		}		
 		return columns;
+	}
+	
+	private <T> List<String> getExcludedColumns(EntityMapper<T> mapper) {
+		ArrayList<String> excludedColumns = new ArrayList<String>();
+		for (Field f : mapper.entityClass.getDeclaredFields()) {
+			if (f.getAnnotation(AuditExclusion.class) != null) {
+				String name = f.getName();
+				Column colAnnotation = f.getAnnotation(Column.class);
+				if (colAnnotation != null && !colAnnotation.name().isEmpty()) {
+					name = colAnnotation.name();
+				}
+				excludedColumns.add(name);
+			}
+		}
+		return excludedColumns;
 	}
 }
