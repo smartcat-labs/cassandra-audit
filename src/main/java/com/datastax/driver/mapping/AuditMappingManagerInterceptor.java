@@ -72,7 +72,7 @@ public class AuditMappingManagerInterceptor {
     	if (parseEntityMethod != null) {
     		try {
 				return (EntityMapper<T>)parseEntityMethod.invoke(manager, klass, ReflectionMapper.factory(), manager);
-			} catch (IllegalAccessException | IllegalArgumentException | InvocationTargetException e) {
+			} catch (IllegalAccessException | InvocationTargetException e) {
 				throw new IllegalArgumentException(e);
 			}
     	} else {
