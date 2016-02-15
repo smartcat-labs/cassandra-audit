@@ -214,7 +214,7 @@ public class CassandraAuditLogger implements AuditLogger {
 	}
 	
 	/**
-	 * Returns a CQL table create statement for the designated entity auditing.
+	 * Creates a CQL table create statement for the designated entity auditing.
 	 *  
 	 * @param keyspaceName audit table keyspace
 	 * @param tableName audit table name
@@ -263,6 +263,13 @@ public class CassandraAuditLogger implements AuditLogger {
 		return columns;
 	}
 	
+	/**
+	 * Returns a list of columns (cells) whose values should not be
+	 * included into the audit log.
+	 * 
+	 * @param mapper entity mapper
+	 * @return a list of column names
+	 */
 	private <T> List<String> getExcludedColumns(EntityMapper<T> mapper) {
 		ArrayList<String> excludedColumns = new ArrayList<String>();
 		for (Field f : mapper.entityClass.getDeclaredFields()) {
