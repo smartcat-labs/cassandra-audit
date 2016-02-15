@@ -1,6 +1,5 @@
 package com.datastax.driver.mapping;
 
-import java.util.EnumMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -8,6 +7,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 import com.datastax.driver.core.BoundStatement;
+import com.datastax.driver.mapping.annotations.Table;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -16,7 +16,6 @@ import io.smartcat.cassandra_audit.Auditable;
 
 public class AuditMapper<T> extends Mapper<T> {
 
-	private static final EnumMap<Option.Type, Option> NO_OPTIONS = new EnumMap<Option.Type, Option>(Option.Type.class);
 	private static int EXECUTOR_NO_THREADS = 10;
 	private static ExecutorService executor = Executors.newFixedThreadPool(EXECUTOR_NO_THREADS);
 
@@ -27,11 +26,12 @@ public class AuditMapper<T> extends Mapper<T> {
 		
 		AuditOptions(Class<T> klass) {
 			Auditable annotation = klass.getAnnotation(Auditable.class);
-			if (annotation != null) {
+			Table table = klass.getAnnotation(Table.class);
+			if (annotation != null && table != null) {
 				this.auditable = true;
 				this.tableName = annotation.tableName();
 				if (this.tableName.isEmpty()) {
-					this.tableName = annotation.tablePrefix() + klass.getSimpleName().toLowerCase();
+					this.tableName = annotation.tablePrefix() + table.name();
 				}
 				this.keyspaceName = annotation.keyspaceName();
 				if (this.keyspaceName.isEmpty()) {
@@ -44,54 +44,15 @@ public class AuditMapper<T> extends Mapper<T> {
 	}
 	
 	AuditOptions auditOptions;
-    private volatile EnumMap<Option.Type, Option> defaultSaveOptions;
-    private volatile EnumMap<Option.Type, Option> defaultDeleteOptions;
     private AuditLogger auditLogger;
     
 	public AuditMapper(MappingManager manager, Class<T> klass, EntityMapper<T> mapper) {
 		super(manager, klass, mapper);
-        this.defaultSaveOptions = NO_OPTIONS;
-        this.defaultDeleteOptions = NO_OPTIONS;
         this.auditOptions = new AuditOptions(klass);
         this.auditLogger = CassandraAuditLogger.getInstance(manager.getSession());
-        this.auditLogger.init(this);
-	}
-
-
-	/* (non-Javadoc)
-	 * @see com.datastax.driver.mapping.Mapper#resetDefaultSaveOptions()
-	 */
-	@Override
-	public void resetDefaultSaveOptions() {
-		super.resetDefaultSaveOptions();
-		this.defaultSaveOptions = NO_OPTIONS;
-	}
-
-	/* (non-Javadoc)
-	 * @see com.datastax.driver.mapping.Mapper#resetDefaultDeleteOptions()
-	 */
-	@Override
-	public void resetDefaultDeleteOptions() {
-		super.resetDefaultDeleteOptions();
-		this.defaultDeleteOptions = NO_OPTIONS;
-	}
-		
-	/* (non-Javadoc)
-	 * @see com.datastax.driver.mapping.Mapper#setDefaultSaveOptions(com.datastax.driver.mapping.Mapper.Option[])
-	 */
-	@Override
-	public void setDefaultSaveOptions(Option... options) {
-		super.setDefaultSaveOptions(options);
-		this.defaultSaveOptions = toMap(options);
-	}
-
-	/* (non-Javadoc)
-	 * @see com.datastax.driver.mapping.Mapper#setDefaultDeleteOptions(com.datastax.driver.mapping.Mapper.Option[])
-	 */
-	@Override
-	public void setDefaultDeleteOptions(Option... options) {
-		super.setDefaultDeleteOptions(options);
-		this.defaultDeleteOptions = toMap(options);
+        if (this.auditOptions.auditable) {
+        	this.auditLogger.init(this);
+        }
 	}
 	
 	/* (non-Javadoc)
@@ -305,14 +266,6 @@ public class AuditMapper<T> extends Mapper<T> {
 		});		
 		return res;
 	}
-
-    private static EnumMap<Option.Type, Option> toMap(Option[] options) {
-        EnumMap<Option.Type, Option> result = new EnumMap<Option.Type, Option>(Option.Type.class);
-        for (Option option : options) {
-            result.put(option.type, option);
-        }
-        return result;
-    }
     
     private void auditSave(final long execTime, final String error, T entity) {
     	auditSaveAsync(execTime, error, entity, (Mapper.Option[])null);
@@ -370,7 +323,7 @@ public class AuditMapper<T> extends Mapper<T> {
     	}    	
     }
      
-    private void auditSaveExec(final long execTime, final String error, final T entity, final Option... options) {
+    private void auditSaveExec(final long execTime, final String error, final T entity, final Option... options) {    	
     	BoundStatement bs;
     	if (options == null) {
     		bs = (BoundStatement)saveQuery(entity);

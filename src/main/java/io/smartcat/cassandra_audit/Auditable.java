@@ -22,7 +22,7 @@ public @interface Auditable {
 	 * Default audit table name prefix. It is used only
 	 * if {@link Auditable#tableName()} is not set. The full
 	 * table name is constructed concatenating the table prefix
-	 * and the entity's simple class name.
+	 * and the value of {@link Table#name()}.
 	 */
 	String tablePrefix() default "audit_";
 	
